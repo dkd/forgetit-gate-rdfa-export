@@ -32,25 +32,10 @@ public class RdfaExporter extends DocumentExporter
     {
         PrintStream pout = new PrintStream(out);
         AnnotationSet outputAS = document.getAnnotations(GateConstants.ORIGINAL_MARKUPS_ANNOT_SET_NAME);
-        System.out.println("reached0");
+        AnnotationSet mentions = document.getAnnotations().get("Mention");
         
-        //only work in body
-        AnnotationSet body = outputAS.get("html");
-        if (body.size() != 1)
-        {
-            System.out.println("no html");
-            return;
-        }
-        body = outputAS.get("body");
-        if (body.size() != 1)
-        {
-            System.out.println("no body");
-            return;
-        }
-        AnnotationSet mentions = document.getAnnotations().get("Mention",body.firstNode().getOffset(),body.lastNode().getOffset());
-        
-		//store created annotations so we can remove them later, not relevant in wasp
-		//but quite relevant in gate.app usecase
+        //store created annotations so we can remove them later, not relevant in wasp
+        //but quite relevant in gate.app usecase
         Set<Integer> created = new HashSet<Integer>();
 
         try
@@ -75,7 +60,16 @@ public class RdfaExporter extends DocumentExporter
               
                 created.add(outputAS.add(start, end, "span", params));
             }
-            pout.println(document.toXml(null, false));
+
+            String result = document.toXml(null, false);
+            //the gate html document implementation will have added this stuff to the ORIGINAL_MARKUPS
+            //we do not want these in the RTE or other endpoints
+            if (options.containsKey("stripOuter") && ((String)options.get("stripOuter")).equals("true"))
+            {
+                result = result.replace("<html><head></head><body>","");
+                result = result.replace("</body></html>","");
+            }
+            pout.println(result);
         }
         catch(Exception e)
         {
@@ -87,4 +81,4 @@ public class RdfaExporter extends DocumentExporter
                 outputAS.remove(outputAS.get(id));
         }    
     }
-}
+    }
