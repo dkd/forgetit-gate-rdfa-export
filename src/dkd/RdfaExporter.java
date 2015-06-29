@@ -27,13 +27,24 @@ public class RdfaExporter extends DocumentExporter
         super("HTML5 RDFa","html","text/html");
     }
 
+    private String extractClass(String input)
+    {
+        if (input.contains("|"))
+            input = input.split("\\|")[0];
+
+        if (input.contains(":"))
+            input = input.split(":")[1];
+
+        return input;
+    }
+
     @Override
     public void export(Document document, OutputStream out, FeatureMap options) throws IOException
     {
         PrintStream pout = new PrintStream(out);
         AnnotationSet outputAS = document.getAnnotations(GateConstants.ORIGINAL_MARKUPS_ANNOT_SET_NAME);
         AnnotationSet mentions = document.getAnnotations().get("Mention");
-        
+
         //store created annotations so we can remove them later, not relevant in wasp
         //but quite relevant in gate.app usecase
         Set<Integer> created = new HashSet<Integer>();
@@ -41,23 +52,17 @@ public class RdfaExporter extends DocumentExporter
         try
         {
             for (Annotation annotation : mentions)
-            {   
+            {
                 FeatureMap params = Factory.newFeatureMap();
                 params.put("vocab", "http://dbpedia.org/ontology/");
                 params.put("resource", annotation.getFeatures().get("inst").toString());
 
-                String type =  annotation.getFeatures().get("airpSpecificClass").toString();
-                if (type.contains("|"))
-                    type = type.split("\\|")[0];
+                params.put("typeof",extractClass(annotation.getFeatures().get("dbpSpecificClass").toString()));
+                params.put("base",extractClass(annotation.getFeatures().get("dbpInterestingClass").toString()));
 
-                if (type.contains(":"))
-                    type = type.split(":")[1];
-
-                params.put("typeof",type);
-                
                 Long start = annotation.getStartNode().getOffset();
                 Long end = annotation.getEndNode().getOffset();
-              
+
                 created.add(outputAS.add(start, end, "span", params));
             }
 
@@ -65,20 +70,20 @@ public class RdfaExporter extends DocumentExporter
             //the gate html document implementation will have added this stuff to the ORIGINAL_MARKUPS
             //we do not want these in the RTE or other endpoints
             if (options.containsKey("stripOuter") && ((String)options.get("stripOuter")).equals("true"))
-            {
-                result = result.replace("<html><head></head><body>","");
-                result = result.replace("</body></html>","");
-            }
+                {
+                    result = result.replace("<html><head></head><body>","");
+                    result = result.replace("</body></html>","");
+                }
             pout.println(result);
         }
         catch(Exception e)
-        {
-            throw new IOException(e);
-        }
+            {
+                throw new IOException(e);
+            }
         finally
-        {
-            for (Integer id : created)
-                outputAS.remove(outputAS.get(id));
-        }    
+            {
+                for (Integer id : created)
+                    outputAS.remove(outputAS.get(id));
+            }
     }
     }
