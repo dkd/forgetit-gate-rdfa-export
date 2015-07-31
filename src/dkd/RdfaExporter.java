@@ -22,72 +22,76 @@ import java.util.Set;
 @CreoleResource(name = "RDFa Lite Exporter", comment = "Exports Annotations as RDFa Lite", tool = true, autoinstances = @AutoInstance, icon="")
 public class RdfaExporter extends DocumentExporter
 {
-        public RdfaExporter()
+    public RdfaExporter()
+    {
+        super("HTML5 RDFa","html","text/html");
+    }
+
+    private String extractClass(String input)
+    {
+        if (input.contains("|"))
+            input = input.split("\\|")[0];
+
+        if (input.contains(":"))
+            input = input.split(":")[1];
+
+        input = input.replace("http://dbpedia.org/ontology/","");
+
+        return input;
+    }
+
+    @Override
+    public void export(Document document, OutputStream out, FeatureMap options) throws IOException
+    {
+        PrintStream pout = new PrintStream(out, true, "UTF-8");
+        AnnotationSet outputAS = document.getAnnotations(GateConstants.ORIGINAL_MARKUPS_ANNOT_SET_NAME);
+        AnnotationSet mentions = document.getAnnotations().get("Mention");
+
+        //store created annotations so we can remove them later, not relevant in wasp
+        //but quite relevant in gate.app usecase
+        Set<Integer> created = new HashSet<Integer>();
+
+        try
         {
-                super("HTML5 RDFa","html","text/html");
-        }
+            for (Annotation annotation : mentions)
+            {
+                FeatureMap params = Factory.newFeatureMap();
+                params.put("vocab", "http://dbpedia.org/ontology/");
+                params.put("resource", annotation.getFeatures().get("inst").toString());
 
-        private String extractClass(String input)
+                if (annotation.getFeatures().get("dbpSpecificClass") != null)
+                    params.put("typeof",extractClass(annotation.getFeatures().get("dbpSpecificClass").toString()));
+                else if (annotation.getFeatures().get("class") != null)
+                    params.put("typeof",annotation.getFeatures().get("class").toString());
+
+                //params.put("base",extractClass(annotation.getFeatures().get("dbpInterestingClass").toString()));
+
+                Long start = annotation.getStartNode().getOffset();
+                Long end = annotation.getEndNode().getOffset();
+
+                created.add(outputAS.add(start, end, "span", params));
+            }
+
+            String result = document.toXml(null, false);
+            //the gate html document implementation will have added this stuff to the ORIGINAL_MARKUPS
+            //we do not want these in the RTE or other endpoints
+            if (options.containsKey("stripOuter") && ((String)options.get("stripOuter")).equals("true"))
+            {
+                result = result.replace("<html><head></head><body>","");
+                result = result.replace("</body></html>","");
+            }
+            pout.println(result);
+            PrintStream pout2 = new PrintStream(System.out, true, "UTF-8");
+            pout2.print(result);
+        }
+        catch(Exception e)
         {
-                if (input.contains("|"))
-                        input = input.split("\\|")[0];
-
-                if (input.contains(":"))
-                        input = input.split(":")[1];
-
-                return input;
+            throw new IOException(e);
         }
-
-        @Override
-        public void export(Document document, OutputStream out, FeatureMap options) throws IOException
+        finally
         {
-                PrintStream pout = new PrintStream(out);
-                AnnotationSet outputAS = document.getAnnotations(GateConstants.ORIGINAL_MARKUPS_ANNOT_SET_NAME);
-                AnnotationSet mentions = document.getAnnotations().get("Mention");
-
-                //store created annotations so we can remove them later, not relevant in wasp
-                //but quite relevant in gate.app usecase
-                Set<Integer> created = new HashSet<Integer>();
-
-                try
-                {
-                        for (Annotation annotation : mentions)
-                        {
-                                FeatureMap params = Factory.newFeatureMap();
-                                params.put("vocab", "http://dbpedia.org/ontology/");
-                                params.put("resource", annotation.getFeatures().get("inst").toString());
-
-                                if (annotation.getFeatures().get("dbpSpecificClass") != null)
-                                        params.put("typeof",extractClass(annotation.getFeatures().get("dbpSpecificClass").toString()));
-                                else if (annotation.getFeatures().get("class") != null)
-                                        params.put("typeof",annotation.getFeatures().get("class").toString());
-
-                                //params.put("base",extractClass(annotation.getFeatures().get("dbpInterestingClass").toString()));
-
-                                Long start = annotation.getStartNode().getOffset();
-                                Long end = annotation.getEndNode().getOffset();
-
-                                created.add(outputAS.add(start, end, "span", params));
-                        }
-
-                        String result = document.toXml(null, false);
-                        //the gate html document implementation will have added this stuff to the ORIGINAL_MARKUPS
-                        //we do not want these in the RTE or other endpoints
-                        if (options.containsKey("stripOuter") && ((String)options.get("stripOuter")).equals("true"))
-                        {
-                                result = result.replace("<html><head></head><body>","");
-                                result = result.replace("</body></html>","");
-                        }
-                        pout.println(result);
-                }
-                catch(Exception e)
-                {
-                        throw new IOException(e);
-                }
-                finally
-                {
-                        for (Integer id : created)
-                                outputAS.remove(outputAS.get(id));
-                }
+            for (Integer id : created)
+                outputAS.remove(outputAS.get(id));
         }
-        }
+    }
+}
